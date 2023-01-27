@@ -7,3 +7,5 @@ Also contains functions for smoothing position data and estimating derivatives n
 Functions are in Matlab and R.
 
 This is supplemental code for Roche, D.G., Tytell, E.D., and Domenici, P. "Kinematics and behaviour in fish escape responses: guidelines for conducting, analysing, and reporting experiments" to be published in Journal of Experimental Biology.
+
+The code is archived on Zenodo at [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7577129.svg)](https://doi.org/10.5281/zenodo.7577129)
