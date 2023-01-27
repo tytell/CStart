@@ -3,3 +3,5 @@
 *.pptx
 test_com_techniques*
 *.asv
+*.Rproj
+*.nb.html

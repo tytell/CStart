@@ -1,0 +1,169 @@
+---
+title: "CStart sample"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(patchwork)
+```
+
+```{r}
+source("CStart-functions.R")
+```
+
+Load the sample data set.
+```{r}
+data <- read_csv("CStart-sample.csv")
+```
+Plot the midline.
+```{r}
+data |> 
+  ggplot(aes(x = mxmm, y = mymm, group = tsec)) +
+  geom_path() +
+  coord_fixed()
+```
+# Body width and height
+
+We need the width and height of the body to estimate the center of mass, assuming that the body is constant density.
+
+Read in the bluegill body shape file.
+```{r}
+shape <- read_csv("bluegillshape.csv") |> 
+  mutate(s = pracma::linspace(0, 1, n()))
+```
+Show the body width and body height.
+```{r}
+p1 <- ggplot(shape, aes(x = s, y = widthL)) +
+  geom_line()
+
+p2 <- ggplot(shape, aes(x = s, y = heightL)) +
+  geom_line()
+
+p1 + p2 + plot_layout(ncol = 1)
+```
+
+# Estimate COM
+
+## Stretched-straight COM
+
+This first estimates the location of the stretched straight COM on the body,
+based on the width and height, assuming constant density.
+```{r}
+sscomdist <- get_stretched_straight_com(shape$widthL, shape$heightL)
+sscomdist
+```
+
+Now we interpolate that position on the midline throughout the C start.
+```{r}
+comdata3 <-
+  data |> 
+  group_by(tsec) |> 
+  group_modify(\(df, key) interp_stretched_straight_com(df, mxmm,mymm, ssdist=sscomdist)) |> 
+  mutate(method = 'ss')
+```
+
+## COM from volume
+
+Get the time varying center of mass, based on the volume of the fish, again
+assuming constant density.
+
+```{r}
+comdata1 <-
+  data |> 
+  group_by(tsec) |> 
+  group_modify(\(df, key) get_com(df, mxmm, mymm, 
+                                  width = shape$widthL, height = shape$heightL)) |> 
+  mutate(method = 'volume')
+```
+
+## COM from horizontal projected area
+
+Get the time varying center of mass, based on the horizontal projected area of the 
+fish, assuming contsant height and constant density.
+
+```{r}
+comdata2 <-
+  data |> 
+  group_by(tsec) |> 
+  group_modify(\(df, key) get_com(df, mxmm, mymm, 
+                                  width = shape$widthL)) |> 
+  mutate(method = 'area')
+  
+```
+
+Merge the results and compare them
+```{r}
+comdata <- ungroup(comdata1) |> 
+  bind_rows(ungroup(comdata2)) |> 
+  bind_rows(ungroup(comdata3))
+
+comdata |> 
+  # filter(method == "volume") |> 
+  ggplot(aes(x = comx, y = comy, color = method)) +
+  geom_path()
+```
+
+# Smooth data and take derivatives
+
+
+```{r}
+datas <-
+  data |> 
+  dplyr::filter(pt == 2) |> 
+  mutate(y1 = mypix,
+         y1s = smooth_1_position(y1, samplerate, stage1dur = 0.04, endmode="none"))
+
+p1 <- datas |> 
+  ggplot(aes(x = tsec)) +
+  geom_point(aes(y = y1), color = "black") +
+  geom_path(aes(y = y1s), color = "blue") +
+  xlim(-0.01, 0.08)
+  
+p2 <- datas |> 
+  ggplot(aes(x = tsec)) +
+  geom_point(aes(y = y1s-y1), color = "blue") +
+  xlim(-0.01, 0.08) +
+  ylab("Difference between\nsmoothed and original")
+
+p1 + p2 + plot_layout(ncol = 1)
+```
+
+```{r}
+data |> 
+  dplyr::filter(pt %in% c(1, 5, 10, 15, 20)) |> 
+  group_by(pt) |> 
+  group_modify(~ smooth_positions(.x, mxpix, mypix, samplerate, stage1dur = 0.04)) |> 
+  ggplot(aes(x = tsec)) +
+  geom_point(aes(y = mypix, group = pt)) +
+  geom_path(aes(y = mypix.s, color = pt)) +
+  xlim(-0.01, 0.08)
+```
+
+
+
+```{r}
+data |> 
+  dplyr::filter(pt %in% c(1, 5, 10, 15, 20)) |> 
+  group_by(pt) |> 
+  group_modify(~ smooth_positions(.x, mxpix, mypix, samplerate, stage1dur = 0.04)) |> 
+  mutate(vx = nderivative(tsec, mxpix),
+         vxs = nderivative(tsec, mxpix.s)) |> 
+  mutate(pt = factor(pt)) |> 
+  ggplot(aes(x = tsec)) +
+  geom_point(aes(y = vx, color = pt)) +
+  geom_path(aes(y = vxs, color = pt)) +
+  xlim(-0.01, 0.08)
+```
+
+```{r}
+comdata |> 
+  group_by(method) |> 
+  mutate(comvelx = nderivative(tsec, comx),
+         comvely = nderivative(tsec, comy),
+         comvel = sqrt(comvelx^2 + comvely^2)) |> 
+  ggplot(aes(x = tsec, y = comvel, color = method)) +
+  geom_path() +
+  xlim(-0.01, 0.08)
+```
+
